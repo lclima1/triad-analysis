@@ -48,9 +48,3 @@ By reducing harmonic analysis to explicitly observable simultaneities, the metho
 - Streamlit
 - pandas
 
-## Usage
-
-Run locally:
-
-```bash
-
