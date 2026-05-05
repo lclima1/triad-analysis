@@ -218,7 +218,7 @@ def analyze_explicit_onsets(score_path: str):
     return triad_hits, summary
 
 
-st.title("Triad Analyzer (Strict Onset)")
+st.title("Triad Analysis")
 
 uploaded_file = st.file_uploader(
     "Upload MusicXML (.mxl or .xml)",
