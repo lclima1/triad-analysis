@@ -7,27 +7,14 @@ from typing import List
 from music21 import converter, chord, note, stream
 
 
-TRIAD_FORMS = {
-    "major": {0, 4, 7},
-    "minor": {0, 3, 7},
-    "diminished": {0, 3, 6},
-    "augmented": {0, 4, 8},
+TRIAD_INTERVALS_BY_LETTER = {
+    "major": (4, 7),
+    "minor": (3, 7),
+    "diminished": (3, 6),
+    "augmented": (4, 8),
 }
 
-PC_NAMES = {
-    0: "C",
-    1: "C♯",
-    2: "D",
-    3: "E♭",
-    4: "E",
-    5: "F",
-    6: "F♯",
-    7: "G",
-    8: "A♭",
-    9: "A",
-    10: "B♭",
-    11: "B",
-}
+LETTER_ORDER = ["C", "D", "E", "F", "G", "A", "B"]
 
 
 def pretty_pitch(name: str) -> str:
@@ -59,49 +46,93 @@ def count_noteheads_in_score(s: stream.Stream) -> int:
     return total
 
 
-def classify_exact_triad(pcs_unique: List[int]):
-    pcs = set(pcs_unique)
+def letter_index(letter: str) -> int:
+    return LETTER_ORDER.index(letter)
 
-    if len(pcs) != 3:
+
+def pitch_spelling_name(p) -> str:
+    """
+    Returns pitch spelling without octave, preserving notation:
+    C, C♯, C♭, etc.
+    """
+    return pretty_pitch(p.name)
+
+
+def pitch_letters_are_root_third_fifth(pitches, root_pitch) -> bool:
+    """
+    Checks whether the written note letters form root-third-fifth.
+    This prevents enharmonic pitch-class sets from being counted
+    as triads when the spelling is not tertian.
+    """
+    root_letter = root_pitch.step
+    root_i = letter_index(root_letter)
+
+    expected_letters = {
+        LETTER_ORDER[root_i],
+        LETTER_ORDER[(root_i + 2) % 7],
+        LETTER_ORDER[(root_i + 4) % 7],
+    }
+
+    actual_letters = {p.step for p in pitches}
+
+    return actual_letters == expected_letters
+
+
+def classify_spelled_triad(pitches):
+    """
+    Strictly classifies only complete tertian triads using both:
+    1. written letter spelling: root-third-fifth
+    2. semitone intervals: major/minor/diminished/augmented
+
+    This avoids counting non-tertian enharmonic formations as triads.
+    """
+    unique_spellings = {}
+
+    for p in pitches:
+        unique_spellings[p.name] = p
+
+    if len(unique_spellings) != 3:
         return False, None, None
 
-    for root_pc in pcs:
-        intervals = {(pc - root_pc) % 12 for pc in pcs}
+    unique_pitches = list(unique_spellings.values())
 
-        for quality, form in TRIAD_FORMS.items():
-            if intervals == form:
-                return True, quality, root_pc
+    for root_pitch in unique_pitches:
+        if not pitch_letters_are_root_third_fifth(unique_pitches, root_pitch):
+            continue
+
+        root_pc = root_pitch.pitchClass
+        intervals = sorted((p.pitchClass - root_pc) % 12 for p in unique_pitches)
+
+        if intervals == [0, 4, 7]:
+            return True, "major", root_pitch
+
+        if intervals == [0, 3, 7]:
+            return True, "minor", root_pitch
+
+        if intervals == [0, 3, 6]:
+            return True, "diminished", root_pitch
+
+        if intervals == [0, 4, 8]:
+            return True, "augmented", root_pitch
 
     return False, None, None
 
 
-def determine_inversion(quality: str, root_pc: int, bass_pc: int) -> int:
-    if bass_pc == root_pc:
+def determine_inversion_from_spelling(quality: str, root_pitch, bass_pitch) -> int:
+    root_letter = root_pitch.step
+    bass_letter = bass_pitch.step
+
+    root_i = letter_index(root_letter)
+
+    third_letter = LETTER_ORDER[(root_i + 2) % 7]
+    fifth_letter = LETTER_ORDER[(root_i + 4) % 7]
+
+    if bass_letter == root_letter:
         return 0
-
-    if quality == "major":
-        if bass_pc == (root_pc + 4) % 12:
-            return 1
-        if bass_pc == (root_pc + 7) % 12:
-            return 2
-
-    if quality == "minor":
-        if bass_pc == (root_pc + 3) % 12:
-            return 1
-        if bass_pc == (root_pc + 7) % 12:
-            return 2
-
-    if quality == "diminished":
-        if bass_pc == (root_pc + 3) % 12:
-            return 1
-        if bass_pc == (root_pc + 6) % 12:
-            return 2
-
-    if quality == "augmented":
-        if bass_pc == (root_pc + 4) % 12:
-            return 1
-        if bass_pc == (root_pc + 8) % 12:
-            return 2
+    if bass_letter == third_letter:
+        return 1
+    if bass_letter == fifth_letter:
+        return 2
 
     return -1
 
@@ -149,12 +180,11 @@ def analyze_explicit_onsets(score_path: str):
 
         onset_event_total += 1
 
-        ch = chord.Chord(pitches)
-        pcs_unique = sorted(set(ch.pitchClasses))
-
-        ok, quality, root_pc = classify_exact_triad(pcs_unique)
-        if not ok or quality is None or root_pc is None:
+        ok, quality, root_pitch = classify_spelled_triad(pitches)
+        if not ok or quality is None or root_pitch is None:
             continue
+
+        ch = chord.Chord(pitches)
 
         ref_el = started[0]
         meas = None
@@ -170,11 +200,9 @@ def analyze_explicit_onsets(score_path: str):
 
         try:
             bass = ch.bass()
-            bass_pc = bass.pitchClass if bass else None
             bass_name = pretty_pitch(bass.name) if bass else "?"
-            root_name = PC_NAMES.get(root_pc, "?")
-
-            inv = determine_inversion(quality, root_pc, bass_pc) if bass_pc is not None else -1
+            root_name = pretty_pitch(root_pitch.name)
+            inv = determine_inversion_from_spelling(quality, root_pitch, bass) if bass else -1
         except Exception:
             inv = -1
             root_name = "?"
@@ -192,7 +220,7 @@ def analyze_explicit_onsets(score_path: str):
             "root": root_name,
             "bass": bass_name,
             "pitches": pitches_str,
-            "pcs": tuple(pcs_unique),
+            "spellings": tuple(sorted(pitch_spelling_name(p) for p in pitches)),
         })
 
         counts_all[quality] += 1
