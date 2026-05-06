@@ -31,7 +31,38 @@ def is_tied_continuation(el):
         return el.tie is not None and el.tie.type in ("stop", "continue")
 
     if isinstance(el, chord.Chord):
-        return el.tie is not None and el.tie.type in ("stop", "continue")
+        try:
+            return any(
+                n.tie is not None and n.tie.type in ("stop", "continue")
+                for n in el.notes
+            )
+        except Exception:
+            return False
+
+    return False
+
+
+def has_sustained_overlap(flat_score, t: float) -> bool:
+    """
+    Returns True if any note/chord is already sounding at offset t
+    without beginning there, or if a tied continuation begins at t.
+
+    This excludes triadic subsets occurring inside larger sustained sonorities.
+    """
+    eps = 1e-6
+
+    for el in flat_score.notes:
+        if not isinstance(el, (note.Note, chord.Chord)):
+            continue
+
+        start = float(el.offset)
+        end = start + float(el.quarterLength)
+
+        if start < t < end:
+            return True
+
+        if abs(start - t) < eps and is_tied_continuation(el):
+            return True
 
     return False
 
@@ -179,6 +210,11 @@ def analyze_explicit_onsets(score_path: str):
             continue
 
         onset_event_total += 1
+
+        # Exclude events where any sustained or tied-over tone is sounding.
+        # This prevents counting a triadic subset inside a larger simultaneity.
+        if has_sustained_overlap(flat, t):
+            continue
 
         ok, quality, root_pitch = classify_spelled_triad(pitches)
         if not ok or quality is None or root_pitch is None:
