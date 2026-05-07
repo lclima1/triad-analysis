@@ -7,13 +7,6 @@ from typing import List
 from music21 import converter, chord, note, stream
 
 
-TRIAD_INTERVALS_BY_LETTER = {
-    "major": (4, 7),
-    "minor": (3, 7),
-    "diminished": (3, 6),
-    "augmented": (4, 8),
-}
-
 LETTER_ORDER = ["C", "D", "E", "F", "G", "A", "B"]
 
 
@@ -78,41 +71,39 @@ def has_tied_overlap(flat_score, t: float) -> bool:
 
 
 def human_measure_position(offset):
+    """
+    Converts measure-relative offset in quarter-note units into a readable score location.
+
+    Example:
+    0.0 -> beat 1
+    0.5 -> beat 1 + eighth
+    1.0 -> beat 2
+    1.5 -> beat 2 + eighth
+    """
     if offset is None:
         return "?"
 
     offset = round(float(offset), 3)
-
-    if offset == 0:
-        return "start of measure"
-
     whole = int(offset)
     frac = round(offset - whole, 3)
 
-    parts = []
+    beat_number = whole + 1
 
-    if whole == 1:
-        parts.append("after 1 quarter note")
-    elif whole > 1:
-        parts.append(f"after {whole} quarter notes")
+    if frac == 0:
+        return f"beat {beat_number}"
 
     if frac == 0.25:
-        parts.append("+ sixteenth note")
-    elif frac == 0.5:
-        parts.append("+ eighth note")
-    elif frac == 0.75:
-        parts.append("+ dotted eighth")
-    elif frac == 0.333:
-        parts.append("+ triplet eighth")
-    elif frac == 0.667:
-        parts.append("+ two triplet eighths")
-    elif frac != 0:
-        parts.append(f"+ {frac} quarter notes")
+        return f"beat {beat_number} + sixteenth"
+    if frac == 0.5:
+        return f"beat {beat_number} + eighth"
+    if frac == 0.75:
+        return f"beat {beat_number} + dotted eighth"
+    if frac == 0.333:
+        return f"beat {beat_number} + triplet eighth"
+    if frac == 0.667:
+        return f"beat {beat_number} + two triplet eighths"
 
-    if not parts:
-        return "start of measure"
-
-    return " ".join(parts)
+    return f"beat {beat_number} + {frac} quarter notes"
 
 
 def count_noteheads_in_score(s: stream.Stream) -> int:
@@ -168,13 +159,10 @@ def classify_spelled_triad(pitches):
 
         if intervals == [0, 4, 7]:
             return True, "major", root_pitch
-
         if intervals == [0, 3, 7]:
             return True, "minor", root_pitch
-
         if intervals == [0, 3, 6]:
             return True, "diminished", root_pitch
-
         if intervals == [0, 4, 8]:
             return True, "augmented", root_pitch
 
@@ -243,6 +231,8 @@ def analyze_explicit_onsets(score_path: str):
 
         onset_event_total += 1
 
+        # Exclude only events affected by duration ties.
+        # Expressive slurs and ordinary sustained notes are ignored.
         if has_tied_overlap(flat, t):
             continue
 
@@ -333,6 +323,19 @@ if uploaded_file:
     st.write(summary)
 
     df = pd.DataFrame(hits)
+
+    desired_columns = [
+        "measure",
+        "position",
+        "quality",
+        "inversion",
+        "root",
+        "bass",
+        "pitches",
+        "spellings",
+    ]
+    df = df[[col for col in desired_columns if col in df.columns]]
+
     st.subheader("Detected Triads")
     st.dataframe(df, use_container_width=True)
 
