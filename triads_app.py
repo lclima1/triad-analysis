@@ -58,7 +58,6 @@ def has_tied_overlap(flat_score, t: float) -> bool:
         start = float(el.offset)
         end = start + float(el.quarterLength)
 
-        # Case 1: tied note began before t and is still sounding at t
         if start < t < end:
             if isinstance(el, note.Note):
                 if el.tie is not None and el.tie.type in ("start", "continue"):
@@ -72,11 +71,48 @@ def has_tied_overlap(flat_score, t: float) -> bool:
                 except Exception:
                     pass
 
-        # Case 2: tied continuation begins exactly at t
         if abs(start - t) < eps and is_tied_continuation(el):
             return True
 
     return False
+
+
+def human_measure_position(offset):
+    if offset is None:
+        return "?"
+
+    offset = round(float(offset), 3)
+
+    if offset == 0:
+        return "start of measure"
+
+    whole = int(offset)
+    frac = round(offset - whole, 3)
+
+    parts = []
+
+    if whole == 1:
+        parts.append("after 1 quarter note")
+    elif whole > 1:
+        parts.append(f"after {whole} quarter notes")
+
+    if frac == 0.25:
+        parts.append("+ sixteenth note")
+    elif frac == 0.5:
+        parts.append("+ eighth note")
+    elif frac == 0.75:
+        parts.append("+ dotted eighth")
+    elif frac == 0.333:
+        parts.append("+ triplet eighth")
+    elif frac == 0.667:
+        parts.append("+ two triplet eighths")
+    elif frac != 0:
+        parts.append(f"+ {frac} quarter notes")
+
+    if not parts:
+        return "start of measure"
+
+    return " ".join(parts)
 
 
 def count_noteheads_in_score(s: stream.Stream) -> int:
@@ -113,13 +149,6 @@ def pitch_letters_are_root_third_fifth(pitches, root_pitch) -> bool:
 
 
 def classify_spelled_triad(pitches):
-    """
-    Classifies only complete tertian triads using both:
-    1. written letter spelling: root-third-fifth
-    2. semitone intervals: major/minor/diminished/augmented
-
-    This avoids counting non-tertian enharmonic formations as triads.
-    """
     unique_spellings = {}
 
     for p in pitches:
@@ -214,8 +243,6 @@ def analyze_explicit_onsets(score_path: str):
 
         onset_event_total += 1
 
-        # Exclude only events affected by duration ties.
-        # Expressive slurs and ordinary sustained notes are ignored.
         if has_tied_overlap(flat, t):
             continue
 
@@ -227,13 +254,14 @@ def analyze_explicit_onsets(score_path: str):
 
         ref_el = started[0]
         meas = None
-        measure_offset = None
+        position = "?"
 
         try:
             mctx = ref_el.getContextByClass(stream.Measure)
             if mctx:
                 meas = mctx.number
                 measure_offset = round(float(t - mctx.offset), 3)
+                position = human_measure_position(measure_offset)
         except Exception:
             pass
 
@@ -253,7 +281,7 @@ def analyze_explicit_onsets(score_path: str):
 
         triad_hits.append({
             "measure": meas,
-            "measure_offset_qn": measure_offset,
+            "position": position,
             "quality": quality,
             "inversion": inv,
             "root": root_name,
