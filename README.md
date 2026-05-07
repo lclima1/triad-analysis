@@ -1,4 +1,4 @@
-# Triad Analyzer
+# Triad Analysis
 
 This tool performs a computational analysis of triadic structures in MusicXML scores based on explicit simultaneity.
 
