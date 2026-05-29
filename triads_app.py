@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 import tempfile
 from collections import Counter
-from typing import List
 
-from music21 import converter, chord, note, stream
+from music21 import converter, chord, note, stream, meter
 
 
 LETTER_ORDER = ["C", "D", "E", "F", "G", "A", "B"]
@@ -35,84 +34,54 @@ def is_tied_continuation(el):
     return False
 
 
-def has_tied_overlap(flat_score, t: float) -> bool:
+def human_measure_position(offset, time_signature=None):
     """
-    Returns True only if a note tied from a previous event is sounding at offset t,
-    or if a tied continuation begins at t.
+    Converts measure-relative offset into a readable score location.
 
-    Ordinary sustained notes and expressive slurs are ignored.
-    """
-    eps = 1e-6
-
-    for el in flat_score.notes:
-        if not isinstance(el, (note.Note, chord.Chord)):
-            continue
-
-        start = float(el.offset)
-        end = start + float(el.quarterLength)
-
-        if start < t < end:
-            if isinstance(el, note.Note):
-                if el.tie is not None and el.tie.type in ("start", "continue"):
-                    return True
-
-            elif isinstance(el, chord.Chord):
-                try:
-                    for n in el.notes:
-                        if n.tie is not None and n.tie.type in ("start", "continue"):
-                            return True
-                except Exception:
-                    pass
-
-        if abs(start - t) < eps and is_tied_continuation(el):
-            return True
-
-    return False
-
-
-def human_measure_position(offset):
-    """
-    Converts measure-relative offset in quarter-note units into a readable score location.
-
-    Example:
-    0.0 -> beat 1
-    0.5 -> beat 1 + eighth
-    1.0 -> beat 2
-    1.5 -> beat 2 + eighth
+    The function respects the local time signature.
+    For example:
+    - in 4/4, beat = quarter note
+    - in 12/8, beat = dotted quarter note
     """
     if offset is None:
         return "?"
 
     offset = round(float(offset), 3)
-    whole = int(offset)
-    frac = round(offset - whole, 3)
 
-    beat_number = whole + 1
+    if time_signature is not None:
+        beat_length = float(time_signature.beatDuration.quarterLength)
+    else:
+        beat_length = 1.0
 
-    if frac == 0:
+    beat_number = int(offset // beat_length) + 1
+    remainder = round(offset - ((beat_number - 1) * beat_length), 3)
+
+    if remainder == 0:
         return f"beat {beat_number}"
 
-    if frac == 0.25:
+    if remainder == 0.25:
         return f"beat {beat_number} + sixteenth"
-    if frac == 0.5:
+    if remainder == 0.5:
         return f"beat {beat_number} + eighth"
-    if frac == 0.75:
+    if remainder == 0.75:
         return f"beat {beat_number} + dotted eighth"
-    if frac == 0.333:
-        return f"beat {beat_number} + triplet eighth"
-    if frac == 0.667:
-        return f"beat {beat_number} + two triplet eighths"
+    if remainder == 1.0:
+        return f"beat {beat_number} + quarter"
+    if remainder == 1.5:
+        return f"beat {beat_number} + dotted quarter"
 
-    return f"beat {beat_number} + {frac} quarter notes"
+    return f"beat {beat_number} + {remainder} quarter notes"
 
 
 def count_noteheads_in_score(s: stream.Stream) -> int:
     total = 0
+
     for el in s.recurse():
         if isinstance(el, note.Note):
             total += 1
         elif isinstance(el, chord.Chord):
             total += len(el.pitches)
+
     return total
 
 
@@ -140,6 +109,15 @@ def pitch_letters_are_root_third_fifth(pitches, root_pitch) -> bool:
 
 
 def classify_spelled_triad(pitches):
+    """
+    Classifies only exactly three uniquely spelled pitches.
+
+    Accepted qualities:
+    - major
+    - minor
+    - diminished
+    - augmented
+    """
     unique_spellings = {}
 
     for p in pitches:
@@ -169,7 +147,7 @@ def classify_spelled_triad(pitches):
     return False, None, None
 
 
-def determine_inversion_from_spelling(quality: str, root_pitch, bass_pitch) -> int:
+def determine_inversion_from_spelling(root_pitch, bass_pitch) -> int:
     root_letter = root_pitch.step
     bass_letter = bass_pitch.step
 
@@ -190,6 +168,7 @@ def determine_inversion_from_spelling(quality: str, root_pitch, bass_pitch) -> i
 
 def analyze_explicit_onsets(score_path: str):
     s = converter.parse(score_path)
+
     noteheads_total = count_noteheads_in_score(s)
     flat = s.flatten()
 
@@ -231,12 +210,8 @@ def analyze_explicit_onsets(score_path: str):
 
         onset_event_total += 1
 
-        # Exclude only events affected by duration ties.
-        # Expressive slurs and ordinary sustained notes are ignored.
-        if has_tied_overlap(flat, t):
-            continue
-
         ok, quality, root_pitch = classify_spelled_triad(pitches)
+
         if not ok or quality is None or root_pitch is None:
             continue
 
@@ -248,10 +223,13 @@ def analyze_explicit_onsets(score_path: str):
 
         try:
             mctx = ref_el.getContextByClass(stream.Measure)
+
             if mctx:
                 meas = mctx.number
                 measure_offset = round(float(t - mctx.offset), 3)
-                position = human_measure_position(measure_offset)
+                ts = mctx.getContextByClass(meter.TimeSignature)
+                position = human_measure_position(measure_offset, ts)
+
         except Exception:
             pass
 
@@ -259,7 +237,8 @@ def analyze_explicit_onsets(score_path: str):
             bass = ch.bass()
             bass_name = pretty_pitch(bass.name) if bass else "?"
             root_name = pretty_pitch(root_pitch.name)
-            inv = determine_inversion_from_spelling(quality, root_pitch, bass) if bass else -1
+            inv = determine_inversion_from_spelling(root_pitch, bass) if bass else -1
+
         except Exception:
             inv = -1
             root_name = "?"
@@ -281,21 +260,30 @@ def analyze_explicit_onsets(score_path: str):
         })
 
         counts_all[quality] += 1
+
         if inv == 0:
             counts_rootpos[quality] += 1
 
     triad_total = len(triad_hits)
     rootpos_total = sum(counts_rootpos.values())
 
-    triads_per_100_notes = (triad_total / noteheads_total * 100) if noteheads_total else 0
-    rootpos_per_100_notes = (rootpos_total / noteheads_total * 100) if noteheads_total else 0
-    triad_event_share = (triad_total / onset_event_total * 100) if onset_event_total else 0
+    triads_percent_noteheads = (
+        triad_total / noteheads_total * 100
+    ) if noteheads_total else 0
+
+    rootpos_percent_noteheads = (
+        rootpos_total / noteheads_total * 100
+    ) if noteheads_total else 0
+
+    triad_event_share = (
+        triad_total / onset_event_total * 100
+    ) if onset_event_total else 0
 
     summary = {
         "Total triads": triad_total,
         "Triad-event share (%)": round(triad_event_share, 2),
-        "Triads per 100 notes": round(triads_per_100_notes, 2),
-        "Root-position per 100 notes": round(rootpos_per_100_notes, 2),
+        "Triads (% of noteheads)": round(triads_percent_noteheads, 2),
+        "Root-position triads (% of noteheads)": round(rootpos_percent_noteheads, 2),
         "Onset events": onset_event_total,
         "Noteheads": noteheads_total,
     }
@@ -334,10 +322,17 @@ if uploaded_file:
         "pitches",
         "spellings",
     ]
+
     df = df[[col for col in desired_columns if col in df.columns]]
 
     st.subheader("Detected Triads")
     st.dataframe(df, use_container_width=True)
 
     csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("Download CSV", csv, "triads.csv", "text/csv")
+
+    st.download_button(
+        "Download CSV",
+        csv,
+        "triads.csv",
+        "text/csv",
+    )
