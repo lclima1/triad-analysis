@@ -328,11 +328,21 @@ if uploaded_file:
     st.subheader("Detected Triads")
     st.dataframe(df, use_container_width=True)
 
-    csv = df.to_csv(index=False).encode("utf-8")
+   summary_df = pd.DataFrame(
+    list(summary.items()),
+    columns=["metric", "value"]
+)
 
-    st.download_button(
-        "Download CSV",
-        csv,
-        "triads.csv",
-        "text/csv",
-    )
+combined_csv = (
+    "Summary\n"
+    + summary_df.to_csv(index=False)
+    + "\nDetected Triads\n"
+    + df.to_csv(index=False)
+).encode("utf-8")
+
+st.download_button(
+    "Download CSV with summary",
+    combined_csv,
+    "triads_with_summary.csv",
+    "text/csv",
+)
