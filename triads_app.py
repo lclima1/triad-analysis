@@ -306,8 +306,6 @@ For notehead-based comparisons:
 - tied continuations are excluded;
 - duplicated pitch–octave instances occurring simultaneously in different voices are counted only once;
 - octave distinctions are preserved.
-
-The analysis therefore measures the explicit articulation of triadic structures rather than the complete sounding harmonic texture.
 """)
 
 
