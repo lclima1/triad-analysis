@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import tempfile
-from collections import Counter
+from collections import Counter, defaultdict
 
 from music21 import converter, chord, note, stream, meter
 
@@ -64,16 +64,34 @@ def human_measure_position(offset, time_signature=None):
     return f"beat {beat_number} + {remainder} quarter notes"
 
 
-def count_noteheads_in_score(s: stream.Stream) -> int:
-    total = 0
+def count_notehead_instances_for_normalisation(s: stream.Stream) -> int:
+    """
+    Counts unique pitch-octave instances per onset.
 
-    for el in s.recurse():
+    If the same pitch-octave appears simultaneously in different voices,
+    it is counted only once for notehead-based normalisation.
+    Octave distinctions are preserved.
+    """
+    flat = s.flatten()
+    onset_pitch_sets = defaultdict(set)
+
+    for el in flat.notes:
+        if not isinstance(el, (note.Note, chord.Chord)):
+            continue
+
+        if is_tied_continuation(el):
+            continue
+
+        offset = round(float(el.offset), 6)
+
         if isinstance(el, note.Note):
-            total += 1
-        elif isinstance(el, chord.Chord):
-            total += len(el.pitches)
+            onset_pitch_sets[offset].add(el.pitch.nameWithOctave)
 
-    return total
+        elif isinstance(el, chord.Chord):
+            for p in el.pitches:
+                onset_pitch_sets[offset].add(p.nameWithOctave)
+
+    return sum(len(pitches) for pitches in onset_pitch_sets.values())
 
 
 def letter_index(letter: str) -> int:
@@ -151,7 +169,7 @@ def determine_inversion_from_spelling(root_pitch, bass_pitch) -> int:
 def analyze_explicit_onsets(score_path: str):
     s = converter.parse(score_path)
 
-    noteheads_total = count_noteheads_in_score(s)
+    noteheads_total = count_notehead_instances_for_normalisation(s)
     flat = s.flatten()
 
     onset_offsets = sorted({
@@ -264,7 +282,7 @@ def analyze_explicit_onsets(score_path: str):
         "Triads (% of noteheads)": round(triads_percent_noteheads, 2),
         "Root-position triads (% of noteheads)": round(rootpos_percent_noteheads, 2),
         "Onset events": onset_event_total,
-        "Noteheads": noteheads_total,
+        "Notehead instances used for normalisation": noteheads_total,
     }
 
     return triad_hits, summary
