@@ -312,14 +312,14 @@ if uploaded_file:
         columns=["metric", "value"]
     )
 
-    combined_csv = (
+        combined_csv = (
         "Summary\n"
         + summary_df.to_csv(index=False)
         + "\nDetected Triads\n"
         + df.to_csv(index=False)
     ).encode("utf-8")
 
-        original_name = uploaded_file.name.rsplit(".", 1)[0]
+    original_name = uploaded_file.name.rsplit(".", 1)[0]
     download_name = f"{original_name}_triad_analysis.csv"
 
     st.download_button(
