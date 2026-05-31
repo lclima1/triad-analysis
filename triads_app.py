@@ -312,7 +312,7 @@ if uploaded_file:
         columns=["metric", "value"]
     )
 
-        combined_csv = (
+    combined_csv = (
         "Summary\n"
         + summary_df.to_csv(index=False)
         + "\nDetected Triads\n"
