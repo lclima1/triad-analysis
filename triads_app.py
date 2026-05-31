@@ -294,18 +294,17 @@ with st.expander("Methodological Criteria"):
     st.markdown("""
 This tool identifies **explicitly articulated triadic onset structures** in MusicXML scores.
 
-A sonority is counted as a triad only when:
+A sonority is counted as a triad when the pitches beginning at an onset reduce to exactly three unique pitch spellings forming a correctly notated major, minor, diminished, or augmented triad. Octave duplications do not affect classification.
 
-- exactly three uniquely spelled pitches begin at the same onset;
-- the pitches form a correctly notated major, minor, diminished, or augmented triad;
-- pitches sustained from previous events are not included;
-- only pitches beginning at the analysed onset are considered.
+The analysis is based on onset-defined harmonic objects rather than the complete aggregate of sounding pitches. Consequently, pitches sustained from previous events are not included in the triadic evaluation, even if they continue to sound simultaneously with the analysed onset.
 
 For notehead-based comparisons:
 
 - tied continuations are excluded;
 - duplicated pitch–octave instances occurring simultaneously in different voices are counted only once;
 - octave distinctions are preserved.
+
+The analysis therefore measures the explicit articulation of triadic structures rather than the total triadic character of the accumulated sounding texture.
 """)
 
 
