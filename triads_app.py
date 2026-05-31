@@ -35,14 +35,6 @@ def is_tied_continuation(el):
 
 
 def human_measure_position(offset, time_signature=None):
-    """
-    Converts measure-relative offset into a readable score location.
-
-    The function respects the local time signature.
-    For example:
-    - in 4/4, beat = quarter note
-    - in 12/8, beat = dotted quarter note
-    """
     if offset is None:
         return "?"
 
@@ -58,7 +50,6 @@ def human_measure_position(offset, time_signature=None):
 
     if remainder == 0:
         return f"beat {beat_number}"
-
     if remainder == 0.25:
         return f"beat {beat_number} + sixteenth"
     if remainder == 0.5:
@@ -109,15 +100,6 @@ def pitch_letters_are_root_third_fifth(pitches, root_pitch) -> bool:
 
 
 def classify_spelled_triad(pitches):
-    """
-    Classifies only exactly three uniquely spelled pitches.
-
-    Accepted qualities:
-    - major
-    - minor
-    - diminished
-    - augmented
-    """
     unique_spellings = {}
 
     for p in pitches:
@@ -180,7 +162,6 @@ def analyze_explicit_onsets(score_path: str):
     })
 
     triad_hits = []
-    counts_all = Counter()
     counts_rootpos = Counter()
     onset_event_total = 0
 
@@ -259,8 +240,6 @@ def analyze_explicit_onsets(score_path: str):
             "spellings": tuple(sorted(pitch_spelling_name(p) for p in pitches)),
         })
 
-        counts_all[quality] += 1
-
         if inv == 0:
             counts_rootpos[quality] += 1
 
@@ -328,21 +307,21 @@ if uploaded_file:
     st.subheader("Detected Triads")
     st.dataframe(df, use_container_width=True)
 
-   summary_df = pd.DataFrame(
-    list(summary.items()),
-    columns=["metric", "value"]
-)
+    summary_df = pd.DataFrame(
+        list(summary.items()),
+        columns=["metric", "value"]
+    )
 
-combined_csv = (
-    "Summary\n"
-    + summary_df.to_csv(index=False)
-    + "\nDetected Triads\n"
-    + df.to_csv(index=False)
-).encode("utf-8")
+    combined_csv = (
+        "Summary\n"
+        + summary_df.to_csv(index=False)
+        + "\nDetected Triads\n"
+        + df.to_csv(index=False)
+    ).encode("utf-8")
 
-st.download_button(
-    "Download CSV with summary",
-    combined_csv,
-    "triads_with_summary.csv",
-    "text/csv",
-)
+    st.download_button(
+        "Download CSV with summary",
+        combined_csv,
+        "triads_with_summary.csv",
+        "text/csv",
+    )
