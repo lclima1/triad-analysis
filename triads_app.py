@@ -319,9 +319,12 @@ if uploaded_file:
         + df.to_csv(index=False)
     ).encode("utf-8")
 
+        original_name = uploaded_file.name.rsplit(".", 1)[0]
+    download_name = f"{original_name}_triad_analysis.csv"
+
     st.download_button(
-        "Download CSV with summary",
+        "Download triad analysis",
         combined_csv,
-        "triads_with_summary.csv",
+        download_name,
         "text/csv",
     )
