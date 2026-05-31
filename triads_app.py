@@ -66,10 +66,10 @@ def human_measure_position(offset, time_signature=None):
 
 def count_notehead_instances_for_normalisation(s: stream.Stream) -> int:
     """
-    Counts unique pitch-octave instances per onset.
+    Constructs the adjusted notehead count used for notehead-based comparisons.
 
-    If the same pitch-octave appears simultaneously in different voices,
-    it is counted only once for notehead-based normalisation.
+    Tied continuations are excluded. If the same pitch-octave occurs
+    simultaneously in multiple voices, it is counted only once.
     Octave distinctions are preserved.
     """
     flat = s.flatten()
@@ -282,13 +282,34 @@ def analyze_explicit_onsets(score_path: str):
         "Triads (% of noteheads)": round(triads_percent_noteheads, 2),
         "Root-position triads (% of noteheads)": round(rootpos_percent_noteheads, 2),
         "Onset events": onset_event_total,
-        "Notehead instances used for normalisation": noteheads_total,
+        "Adjusted notehead count": noteheads_total,
     }
 
     return triad_hits, summary
 
 
 st.title("Triad Analysis")
+
+with st.expander("Methodological Criteria"):
+    st.markdown("""
+This tool identifies **explicitly articulated triadic onset structures** in MusicXML scores.
+
+A sonority is counted as a triad only when:
+
+- exactly three uniquely spelled pitches begin at the same onset;
+- the pitches form a correctly notated major, minor, diminished, or augmented triad;
+- pitches sustained from previous events are not included;
+- only pitches beginning at the analysed onset are considered.
+
+For notehead-based comparisons:
+
+- tied continuations are excluded;
+- duplicated pitch–octave instances occurring simultaneously in different voices are counted only once;
+- octave distinctions are preserved.
+
+The analysis therefore measures the explicit articulation of triadic structures rather than the complete sounding harmonic texture.
+""")
+
 
 uploaded_file = st.file_uploader(
     "Upload MusicXML (.mxl or .xml)",
@@ -341,7 +362,7 @@ if uploaded_file:
     download_name = f"{original_name}_triad_analysis.csv"
 
     st.download_button(
-        "Download triad analysis",
+        "Download triad analysis.csv",
         combined_csv,
         download_name,
         "text/csv",
